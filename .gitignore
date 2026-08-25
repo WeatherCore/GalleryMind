@@ -2,6 +2,8 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.workbuddy/
+.python-version
 
 # C extensions
 *.so

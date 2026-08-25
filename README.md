@@ -300,12 +300,16 @@ EOF
 ### 4️⃣ 安装后端依赖
 
 ```bash
-# 建议用 venv 隔离
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
+# 1. 创建虚拟环境（在项目根目录生成 .venv）
+uv venv .venv
 
-pip install -r requirements.txt
+# 2. 激活
+source .venv/Scripts/activate   # Git Bash
+# .venv\Scripts\activate        # CMD / PowerShell
+
+# 3. 按 requirements.txt 装依赖
+uv pip install -r requirements.txt
+
 ```
 
 ### 5️⃣ 启动后端

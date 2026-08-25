@@ -40,9 +40,23 @@ DEFAULT_IMAGE_DIR = Path(os.getenv("IMAGE_DIR", str(DATA_DIR / "images")))
 if not DEFAULT_IMAGE_DIR.exists():
     DEFAULT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
+
 # 从.env读取密钥、接口地址、向量数据库地址；没有就读取写死的默认值
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+
+# Agent 推理模型配置（AgentManager 初始化时创建，负责工具调度与最终回答）
+# 未设置时回退到 OPENAI_API_KEY / OPENAI_BASE_URL，兼容旧 .env
+AGENT_LLM_MODEL = os.getenv("AGENT_LLM_MODEL", "gpt-4o")
+AGENT_LLM_API_KEY = os.getenv("AGENT_LLM_API_KEY", OPENAI_API_KEY)
+AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", OPENAI_BASE_URL)
+
+# Vision 视觉模型配置（describe_image 工具用，需要支持多模态图片输入）
+# 未设置时回退到 OPENAI_API_KEY / OPENAI_BASE_URL，兼容旧 .env
+VISION_LLM_MODEL = os.getenv("VISION_LLM_MODEL", "gpt-4o")
+VISION_LLM_API_KEY = os.getenv("VISION_LLM_API_KEY", OPENAI_API_KEY)
+VISION_LLM_BASE_URL = os.getenv("VISION_LLM_BASE_URL", OPENAI_BASE_URL)
+
 # Milvus URI:Docker Compose 默认暴露 19530 端口
 MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")
 

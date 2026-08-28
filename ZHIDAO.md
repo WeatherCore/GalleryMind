@@ -41,7 +41,7 @@
 **要点**：
 - 既有**传统检索路径**（`/api/search` 同步返回 JSON），也有**Agent 路径**（`/api/agent/chat` SSE 流式），共享同一套检索引擎
 - 检索引擎走**双索引 + 三路召回 + 共享 Reranker**，是一个完整的工业级多模态 RAG 架构样本
-- 前端两套界面（检索面板 / Agent 聊天）通过 `currentMode` 切换，共用 `recallTopK` / `rerankTopK` 参数
+- 前端是「侧栏导航 + 四页面」SPA（React Router）：检索 `/`、Agent 对话 `/agent`、图库管理 `/gallery`、系统状态 `/status`，全部通过 `frontend/src/api.ts` 这一个客户端模块访问后端
 
 ---
 
@@ -76,48 +76,44 @@ GalleryMind/
 │   ├── schemas.py                📋 Pydantic 请求/响应模型（前端契约）
 │   ├── requirements.txt          📋 Python 依赖清单
 │   ├── core/                     ⭐ 核心业务逻辑
-│   │   ├── retrieval.py          🔐 检索引擎（570行，项目核心）
+│   │   ├── retrieval.py          🔐 检索引擎（800行，项目核心）
 │   │   ├── agent.py              🔐 Agent 管理（LangGraph + SSE 流式）
 │   │   └── utils.py              🔧 base64 图片落地 + URL 转换
-│   ├── routers/                  📋 FastAPI 路由层
-│   │   ├── search.py             🔐 /api/search 同步检索接口
-│   │   ├── agent.py              🔐 /api/agent/chat SSE 流式接口
+│   ├── routers/                  📋 FastAPI 路由层（5 个模块）
+│   │   ├── search.py             🔐 /api/search 同步检索接口（成功后写历史）
+│   │   ├── agent.py              🔐 /api/agent/* SSE 流式接口 + 会话重置
+│   │   ├── system.py             🔐 图库管理 + /api/system/status 状态巡检
+│   │   ├── history.py            🔐 /api/history 检索历史（SQLite 持久化）
 │   │   └── health.py             🧪 /api/health + /api/ping 健康检查
 │   ├── data/                     📂 运行时数据（自动创建）
 │   │   ├── images/               📂 图片库（被检索的对象）
 │   │   ├── uploads/              📂 用户上传的临时图片
 │   │   ├── models/               📂 ModelScope 下载的模型缓存
-│   │   └── caption_cache/        📂 图片文本描述缓存（.txt）
+│   │   ├── caption_cache/        📂 图片文本描述缓存（.txt）
+│   │   └── history.db            📂 检索历史数据库（SQLite，自动创建）
+│   ├── .env.example              🧪 环境变量模板（含 Agent/Vision 独立配置示例）
 │   ├── debug_*.py                🧪 调试脚本（不参与主流程）
 │   └── test_*.py                 🧪 测试脚本（不参与主流程）
 │
-├── frontend/                     ⭐ 前端：React + Vite + TS + shadcn/ui
-│   ├── package.json              📋 依赖清单（name: 多模态RAG检索演示界面）
-│   ├── vite.config.ts            🔧 Vite 配置（含 /api /static 代理到 3001）
+├── frontend/                     ⭐ 前端：React 18 + Vite + TS + Tailwind CSS 4（全新重写）
+│   ├── package.json              📋 依赖清单（react-router-dom / tailwindcss / phosphor-icons）
+│   ├── vite.config.ts            🔧 Vite 配置（:3000，/api 与 /static 代理到 3001）
 │   ├── index.html                📋 HTML 入口
 │   └── src/
 │       ├── main.tsx              📋 React 入口（createRoot.render）
-│       ├── App.tsx               🔐 顶层组件（mode 切换 + 状态管理）
-│       ├── types/index.ts        📋 TypeScript 类型定义（SearchResult/Message）
-│       ├── components/           ⭐ 业务组件
-│       │   ├── Header.tsx        📋 顶部导航（检索/Agent 模式切换）
-│       │   ├── UnifiedSearchInput.tsx 🔐 统一搜索输入（文本+图片+阈值）
-│       │   ├── SearchInput.tsx   📋 旧版搜索输入（保留兼容）
-│       │   ├── AgentChat.tsx     🔐 Agent 聊天容器（SSE 事件消费）
-│       │   ├── AgentInput.tsx    📋 Agent 输入框
-│       │   ├── AgentMessage.tsx  🔐 Agent 消息渲染（思考链+结果+总结）
-│       │   ├── ResultCard.tsx    📋 结果卡片（带选中状态）
-│       │   ├── ResultDetail.tsx  📋 结果详情弹窗
-│       │   ├── ComparisonPanel.tsx 📋 对比面板（多选结果对比）
-│       │   ├── ProcessVisualization.tsx 📋 检索过程可视化
-│       │   ├── QuickExamples.tsx 📋 快捷示例查询
-│       │   ├── ImageLightbox.tsx 📋 图片放大灯箱
-│       │   ├── figma/ImageWithFallback.tsx 📋 带兜底的图片组件
-│       │   └── ui/              📋 shadcn/ui 标准组件（60+ 个，本项目跳过注释）
-│       └── utils/                📋 工具函数
-│           ├── mockData.ts      📋 模拟检索结果（演示用）
-│           ├── agentSimulator.ts 📋 Agent 响应模拟器（演示用）
-│           └── processSimulator.ts 📋 进度条模拟器（演示用）
+│       ├── App.tsx               🔐 应用骨架（侧栏布局 + 4 条路由）
+│       ├── api.ts                🔐 后端 API 客户端（全部接口封装 + SSE 解析）
+│       ├── types.ts              📋 TypeScript 类型定义（与 schemas.py 一一对齐）
+│       ├── index.css             🎨 Tailwind 主题令牌（亮色极简单主题）
+│       ├── components/           ⭐ 通用组件
+│       │   ├── Sidebar.tsx       🔐 侧栏导航 + 后端健康呼吸灯
+│       │   ├── ImageUploader.tsx 🔐 图片上传（预览/移除/紧凑模式）
+│       │   └── Lightbox.tsx      🔐 大图查看（以图搜图/删除/元信息）
+│       └── pages/                ⭐ 四大页面
+│           ├── SearchPage.tsx    🔐 检索页（三模式 + 参数滑块 + 历史面板）
+│           ├── AgentPage.tsx     🔐 Agent 对话页（思考链/工具调用/结果渲染）
+│           ├── GalleryPage.tsx   🔐 图库页（上传/删除/热重建索引）
+│           └── StatusPage.tsx    🔐 状态页（Milvus/引擎/模型/图库巡检）
 │
 ├── volumes/                      📂 Milvus Docker 数据卷（自动生成）
 ├── docker-compose.yml            🔧 Milvus 三件套（etcd + minio + milvus）
@@ -127,9 +123,9 @@ GalleryMind/
 **emoji 标记说明**：⭐ 重点目录 / 🔐 核心业务文件 / 🔧 配置/工具 / 📋 普通/契约文件 / 🧪 测试/调试 / 📂 运行时数据
 
 **要点**：
-- 真正承载项目意图的源码约 30 个（backend 9 + frontend 21），其余 60+ 个 `ui/*.tsx` 是 shadcn/ui 模板件
-- `frontend/src/utils/*` 三个 simulator 是**演示模式用**的假数据生成器，真实检索走 `/api/search` 后端
-- `backend/data/` 下的子目录在 `config.py` 中通过 `mkdir(parents=True, exist_ok=True)` 自动创建
+- 真正承载项目意图的源码约 27 个（backend 15 + frontend 12），前端无 UI 模板库依赖，全部页面级组件手写
+- 前端**没有** mock/simulator 工具——"演示模式"由后端 `USE_MOCK_DATA=true` 承担（不加载模型直接返回预设数据），前端代码只写真实接口
+- `backend/data/` 下的子目录在 `config.py` 中通过 `mkdir(parents=True, exist_ok=True)` 自动创建，`history.db` 由 `routers/history.py` 首次访问时建表
 
 ---
 
@@ -292,25 +288,27 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 
 | 阶段 | 顺序 | 文件 | 行数 | 耗时估计 | 阅读目标 |
 |------|------|------|------|----------|----------|
-| 入门 | 1 | `backend/config.py` | 40 | 5 分钟 | 看清配置项与路径布局 |
-| 入门 | 2 | `backend/schemas.py` | 49 | 5 分钟 | 看清前后端数据契约 |
-| 入门 | 3 | `backend/main.py` | 74 | 10 分钟 | 看清启动流程 |
-| 入门 | 4 | `backend/core/utils.py` | 42 | 5 分钟 | 看清图片落地与 URL 转换 |
-| 入门 | 5 | `backend/routers/health.py` | 15 | 2 分钟 | 健康检查（最简单的路由样板）|
-| 进阶 | 6 | `backend/routers/search.py` | 140 | 15 分钟 | 同步检索接口（含 Mock）|
-| 进阶 | 7 | `backend/routers/agent.py` | 36 | 10 分钟 | SSE 流式接口 |
-| 核心 | 8 | `backend/core/agent.py` | 224 | 30 分钟 | Agent 编排与 SSE 事件分发 |
-| 核心 | 9 | `backend/core/retrieval.py` | 570 | 60-90 分钟 | **项目大脑**，建议分块读 |
-| 前端 | 10 | `frontend/src/types/index.ts` | ~50 | 5 分钟 | 前端类型契约 |
-| 前端 | 11 | `frontend/src/App.tsx` | 282 | 20 分钟 | 前端顶层状态机 |
-| 前端 | 12 | `frontend/src/components/UnifiedSearchInput.tsx` | 312 | 15 分钟 | 检索输入主组件 |
-| 前端 | 13 | `frontend/src/components/AgentChat.tsx` | 269 | 20 分钟 | Agent 聊天容器 |
-| 前端 | 14 | 其余业务组件 | ~1000 | 60 分钟 | 按需读 |
-| 前端 | 15 | `frontend/src/utils/*` | ~200 | 15 分钟 | 演示模式模拟器 |
+| 入门 | 1 | `backend/config.py` | 74 | 5 分钟 | 看清配置项与路径布局（含 Agent/Vision 双模型）|
+| 入门 | 2 | `backend/schemas.py` | 70 | 5 分钟 | 看清前后端数据契约 |
+| 入门 | 3 | `backend/main.py` | 131 | 10 分钟 | 看清启动流程（lifespan + 5 路由注册）|
+| 入门 | 4 | `backend/core/utils.py` | 68 | 5 分钟 | 看清图片落地与 URL 转换 |
+| 入门 | 5 | `backend/routers/health.py` | 23 | 2 分钟 | 健康检查（最简单的路由样板）|
+| 进阶 | 6 | `backend/routers/search.py` | 162 | 15 分钟 | 同步检索接口（含 Mock + 历史落库）|
+| 进阶 | 7 | `backend/routers/agent.py` | 58 | 10 分钟 | SSE 流式接口 + 会话重置 |
+| 进阶 | 8 | `backend/routers/system.py` | 230 | 15 分钟 | 图库管理 + 只读状态巡检 |
+| 进阶 | 9 | `backend/routers/history.py` | 99 | 5 分钟 | SQLite 检索历史 |
+| 核心 | 10 | `backend/core/agent.py` | 382 | 30 分钟 | Agent 编排与 SSE 事件分发 |
+| 核心 | 11 | `backend/core/retrieval.py` | 800 | 60-90 分钟 | **项目大脑**，建议分块读 |
+| 前端 | 12 | `frontend/src/types.ts` | 97 | 5 分钟 | 前端类型契约 |
+| 前端 | 13 | `frontend/src/api.ts` | 199 | 15 分钟 | API 客户端 + SSE 流解析（前端唯一出入口）|
+| 前端 | 14 | `frontend/src/App.tsx` | 71 | 5 分钟 | 应用骨架与路由表 |
+| 前端 | 15 | `frontend/src/pages/SearchPage.tsx` | 546 | 30 分钟 | 检索页（最重的页面）|
+| 前端 | 16 | `frontend/src/pages/AgentPage.tsx` | 397 | 20 分钟 | Agent 对话页（SSE 事件渲染）|
+| 前端 | 17 | 其余页面与组件（Gallery/Status/Sidebar 等）| ~700 | 40 分钟 | 按需读 |
 
 ### 5.1 backend/config.py
 
-**作用**：项目配置中枢，从 `.env` 加载敏感信息（API Key、Milvus URI），定义路径布局（图片库、上传、模型缓存、caption 缓存），并自动创建必要目录。
+**作用**：项目配置中枢，从 `.env` 加载敏感信息（API Key、Milvus URI），定义路径布局（图片库、上传、模型缓存、caption 缓存），并自动创建必要目录；同时定义 Agent 与 Vision 两组可独立配置的 LLM 变量。
 
 **关键数据结构**：
 
@@ -319,11 +317,14 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 | `BASE_DIR` | `backend/` | 后端根目录 |
 | `DATA_DIR` | `backend/data` | 运行时数据根 |
 | `UPLOAD_DIR` | `backend/data/uploads` | 用户上传图片落地 |
-| `MODEL_CACHE_DIR` | `backend/data/models` | ModelScope 模型缓存 |
+| `MODEL_CACHE_DIR` | `$MODELSCOPE_CACHE` 或 `backend/data/models` | ModelScope 模型缓存 |
 | `CAPTION_CACHE_DIR` | `backend/data/caption_cache` | 图片文本描述缓存 |
 | `DEFAULT_IMAGE_DIR` | `$IMAGE_DIR` 或 `data/images` | 被检索的图片库 |
-| `OPENAI_API_KEY` | 来自 `.env` | LLM 凭证（gpt-4o）|
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | LLM 端点（可指向代理）|
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | 来自 `.env` / `https://api.openai.com/v1` | 旧版兼容配置（回退用）|
+| `AGENT_LLM_MODEL` | `gpt-4o` | Agent 推理模型（需支持 function calling）|
+| `AGENT_LLM_API_KEY` / `AGENT_LLM_BASE_URL` | 回退 `OPENAI_*` | Agent 模型凭证与端点 |
+| `VISION_LLM_MODEL` | `gpt-4o` | Vision 视觉模型（describe_image 用）|
+| `VISION_LLM_API_KEY` / `VISION_LLM_BASE_URL` | 回退 `OPENAI_*` | Vision 模型凭证与端点 |
 | `MILVUS_URI` | `http://localhost:19530` | Milvus 连接串 |
 | `EMBEDDING_MODEL_MS` | `qwen/Qwen3-VL-Embedding-2B` | 嵌入模型 ID |
 | `RERANKER_MODEL_MS` | `qwen/Qwen3-VL-Reranker-2B` | 精排模型 ID |
@@ -331,8 +332,9 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 | `ALLOWED_ORIGINS` | `["*"]` | CORS 全开（开发友好）|
 
 **要点**：
-- `load_dotenv(override=True)` 用 `.env` 覆盖系统环境变量
-- 三个 `mkdir(parents=True, exist_ok=True)` 保证目录存在，避免运行时 `FileNotFoundError`
+- `load_dotenv(override=False)`：`.env` **只补缺**，已存在的系统环境变量优先——这是 `USE_MOCK_DATA=true python -m backend.main` 这类命令行临时开关能生效的原因（否则 `.env` 里写死的 `USE_MOCK_DATA=false` 会反过来覆盖命令行）
+- `AGENT_LLM_*` / `VISION_LLM_*` 未设置时逐项回退 `OPENAI_API_KEY` / `OPENAI_BASE_URL`，兼容存量 `.env`
+- 四个 `mkdir(parents=True, exist_ok=True)` 保证目录存在，避免运行时 `FileNotFoundError`
 - `ALLOWED_ORIGINS=["*"]` 适合开发，生产环境应收紧
 
 ### 5.2 backend/schemas.py
@@ -347,13 +349,14 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 | `SearchResult` | 单条检索结果 | `imageUrl`、`score`(0-100)、`relevanceScore`(0-1)、`rerankScore`、`metadata` |
 | `SearchResponse` | `/api/search` 响应 | `results`、`processSteps`、`totalTime` |
 | `ProcessStep` | 检索过程步骤 | `status`(pending/processing/completed)、`progress`、`duration` |
-| `AgentChatRequest` | `/api/agent/chat` 请求 | `message`、`image`(base64) |
+| `AgentChatRequest` | `/api/agent/chat` 请求 | `message`、`image`(base64)、`sessionId` |
+| `SessionResetRequest` | `/api/agent/session/reset` 请求 | `sessionId` |
 | `InitRequest/InitResponse` | （预留）初始化接口 | `milvus_uri` |
 
 **要点**：
-- `searchMode` 用中文字符串枚举（`'文搜图' | '图搜图' | '混合搜索'`），后端 `retrieval_engine.search()` 直接 if/elif 分发，简单直接但扩展性一般
+- `searchMode` 用中文字符串枚举（`'文搜图' | '图搜图' | '混合搜索'`），后端 `retrieval_engine.search()` 直接 if/elif 分发，简单直接但扩展性一般；前端 `types.ts` 的 `SEARCH_MODES` 常量与之严格对齐
 - `score` 字段 0-100（前端展示用），`relevanceScore` 字段 0-1（原始相似度），两者并存是历史决策
-- `AgentChatRequest` 极简，因为 Agent 真实数据走 SSE 流，Schema 主要用于请求校验和文档生成
+- `AgentChatRequest` 带 `sessionId`，作为 LangGraph 的 `thread_id` 实现多轮记忆隔离；真实数据走 SSE 流，Schema 主要用于请求校验和文档生成
 
 ### 5.3 backend/main.py
 
@@ -363,12 +366,13 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 
 | 函数 | 行号 | 职责 |
 |------|------|------|
-| `lifespan(app)` | ~23 | 启动时挂载静态文件、初始化 retrieval_engine 和 agent_manager；关闭时打印日志 |
-| `root()` | ~69 | `GET /` 返回 `{"status":"ok"}` 用于探活 |
+| `lifespan(app)` | ~43 | 启动时初始化 retrieval_engine 和 agent_manager；`USE_MOCK_DATA=true` 时跳过（Mock 守卫，纯前端联调不依赖 GPU/Milvus）；关闭时打印日志 |
+| `root()` | ~124 | `GET /` 返回 `{"status":"ok"}` 用于探活 |
 
 **要点**：
 - 用 `lifespan` 替代弃用的 `@app.on_event("startup")`，是 FastAPI 0.93+ 推荐写法
-- `app.include_router(health.router)` 优先注册，保证健康检查路由靠前
+- 路由注册顺序：`health`（优先，保证探活靠前）→ `search` → `agent` → `system` → `history`
+- `app.mount("/static", StaticFiles(directory=DATA_DIR))` 把 `backend/data` 公开成网址，与 `core/utils.py` 的 `get_image_url()` 强耦合（改挂载点必须两边同步）
 - `sys.path.insert(0, parent_dir)` 让 `python main.py` 和 `python -m backend.main` 两种启动方式都能正确解析 `from backend.config import ...`
 
 ### 5.4 backend/core/utils.py
@@ -379,8 +383,8 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 
 | 函数 | 行号 | 职责 |
 |------|------|------|
-| `save_base64_image(base64_str, save_dir)` | ~9 | 去掉 `data:image/...;base64,` header → `base64.b64decode` → PIL 打开 → 用 `uuid4().hex` 生成唯一名 → 保存为 PNG |
-| `get_image_url(file_path)` | ~24 | `file_path.relative_to(DATA_DIR)` → `/static/<relative>`；若不在 DATA_DIR 下，回退到 `/static/images/<filename>` |
+| `save_base64_image(base64_str, save_dir)` | ~18 | 去掉 `data:image/...;base64,` header → `base64.b64decode` → PIL 打开 → 用 `uuid4().hex` 生成唯一名 → 保存为 PNG |
+| `get_image_url(file_path)` | ~47 | `file_path.relative_to(DATA_DIR)` → `/static/<relative>`；若不在 DATA_DIR 下，回退到 `/static/images/<filename>` |
 
 **要点**：
 - 用 `uuid4().hex` 命名避免重名碰撞，但所有上传图都转 PNG（即使原图是 JPG），有轻微存储冗余
@@ -388,29 +392,29 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 
 ### 5.5 backend/core/agent.py
 
-**作用**：Agent 编排核心，封装 LangGraph `create_agent`，提供 SSE 流式输出。
+**作用**：Agent 编排核心，封装 LangGraph `create_agent`，提供 SSE 流式输出与会话重置。
 
 **关键类与函数**：
 
 | 名称 | 行号 | 职责 |
 |------|------|------|
-| `_agent_llm` / `_vision_llm` | ~246 / ~249 | 两个全局 ChatOpenAI 实例：前者给 Agent 用，后者给 `describe_image` 工具用 |
-| `@tool search_images(query, image_path)` | ~35 | 工具：调 retrieval_engine 做检索，返回 JSON 字符串（含 success/results）|
-| `@tool describe_image(image_path)` | ~62 | 工具：用 gpt-4o 看图说话，返回中文描述 |
-| `class AgentManager` | ~88 | 单例（`__new__` 实现），管理 agent 实例与配置 |
-| `AgentManager.initialize()` | ~98 | 创建 `_agent_llm`、注册 tools、定义 system_prompt、调用 `create_agent` + `InMemorySaver` checkpointer |
-| `AgentManager.chat_stream(query, image_path)` | ~129 | SSE 流式入口：发 thinking → 调 `_run_agent_async` → 发 complete |
-| `AgentManager._run_agent_async(content)` | ~157 | 遍历 `agent.stream(stream_mode="values")`，按消息类型分发 6 类 SSE 事件 |
-| `AgentManager._format_sse(event_type, data)` | ~217 | 拼接 `event: X\ndata: Y\n\n` 格式字符串 |
-| `_ts()` | ~221 | 返回 `str(time.time())` 时间戳字符串 |
+| `@tool search_images(query, image_path)` | ~56 | 工具：调 retrieval_engine 做检索，返回 JSON 字符串（含 success/results）|
+| `@tool describe_image(image_path)` | ~94 | 工具：用 Vision LLM 看图说话，返回中文描述 |
+| `class AgentManager` | ~127 | 单例（`__new__` 实现），管理 agent 实例与配置 |
+| `AgentManager.initialize()` | ~146 | 创建 `_agent_llm`（读 `AGENT_LLM_*`）与 `_vision_llm`（读 `VISION_LLM_*`）、注册 tools、定义 system_prompt、调用 `create_agent` + `InMemorySaver` checkpointer |
+| `AgentManager.chat_stream(query, image_path, session_id)` | ~194 | SSE 流式入口：发 thinking → 调 `_run_agent_async` → 发 complete；`session_id` 即 LangGraph `thread_id` |
+| `AgentManager.reset_session(session_id)` | ~251 | 重置指定会话的记忆（配合前端"新对话"按钮）|
+| `AgentManager._run_agent_async(content)` | ~268 | 遍历 `agent.stream(stream_mode="values")`，按消息类型分发 6 类 SSE 事件 |
+| `AgentManager._format_sse(event_type, data)` | ~367 | 拼接 `event: X\ndata: Y\n\n` 格式字符串 |
+| `_ts()` | ~377 | 返回 `str(time.time())` 时间戳字符串 |
 
 **要点**：
-- 两个 LLM 实例**全局化**避免重复创建（ChatOpenAI 构造有连接池开销）
-- `InMemorySaver` checkpointer 让 Agent 具备多轮记忆能力（但 `thread_id="session_default"` 是全局共享的，多用户场景下会串话——这是教学项目的简化设计）
-- SSE 事件类型与前端 `AgentChat.tsx` 的事件处理严格对应：`thinking/tool_call/process/results/summary/complete`
+- **Agent / Vision 双模型独立配置**：`initialize()` 用 `AGENT_LLM_MODEL/API_KEY/BASE_URL` 创建 Agent 推理模型，用 `VISION_LLM_*` 创建 `describe_image` 用的视觉模型；未设置的项逐级回退 `OPENAI_*`（见 5.1）
+- `InMemorySaver` checkpointer 让 Agent 具备多轮记忆能力；`thread_id` 来自前端传入的 `sessionId`（前端"新对话"时生成新 id 并调 `POST /api/agent/session/reset`），比旧版全局共享 `session_default` 已进步，但仍未按用户体系隔离
+- SSE 事件类型与前端 `api.ts` 的 `streamAgentChat` / `pages/AgentPage.tsx` 的事件处理严格对应：`thinking/tool_call/process/results/summary/complete`
 - `await asyncio.sleep(0.01)` 在事件循环中让出控制权，模拟流式效果（实际 LangGraph stream 是同步 generator）
 
-### 5.6 backend/core/retrieval.py（项目核心，570 行）
+### 5.6 backend/core/retrieval.py（项目核心，800 行）
 
 **作用**：多模态检索引擎，封装 Qwen3-VL 嵌入、Milvus 双索引、BM25、Qwen3-VL Reranker，提供统一检索入口。
 
@@ -418,29 +422,29 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 
 | 函数 | 行号 | 职责 |
 |------|------|------|
-| `download_model_from_modelscope(model_id, cache_dir)` | ~38 | 从 ModelScope 下载模型，失败回退到原始 ID |
-| `load_caption_cache(cache_dir)` | ~54 | 加载 `caption_cache/*.txt` 为 `{图片名: 描述}` 字典 |
+| `download_model_from_modelscope(model_id, cache_dir)` | ~50 | 从 ModelScope 下载模型，失败回退到原始 ID |
+| `load_caption_cache(cache_dir)` | ~70 | 加载 `caption_cache/*.txt` 为 `{图片名: 描述}` 字典 |
 
 **模型类**：
 
 | 类 | 行号 | 职责 |
 |---|------|------|
-| `Qwen3VLEmbedding` | ~68 | 封装 Qwen3-VL-Embedding-2B：自动选 device（CUDA/MPS/CPU）、L2 归一化、截断到 `output_dim=512` |
-| `Qwen3VLMultiModalEmbedding(MultiModalEmbedding)` | ~147 | LlamaIndex 适配器：把 `Qwen3VLEmbedding` 包装成 LlamaIndex 标准 MultiModalEmbedding 接口 |
-| `Qwen3VLNodePostprocessor(BaseNodePostprocessor)` | ~175 | LlamaIndex 节点后处理器：封装 Qwen3-VL-Reranker-2B，支持文本/图片/混合 query 精排 |
-| `Qwen3VLRetrievalEngine` | ~280 | **单例检索引擎**：构建双索引、提供 `search()` 统一入口 |
+| `Qwen3VLEmbedding` | ~100 | 封装 Qwen3-VL-Embedding-2B：自动选 device（CUDA/MPS/CPU）、L2 归一化、截断到 `output_dim=512` |
+| `Qwen3VLMultiModalEmbedding(MultiModalEmbedding)` | ~268 | LlamaIndex 适配器：把 `Qwen3VLEmbedding` 包装成 LlamaIndex 标准 MultiModalEmbedding 接口（含 async 系列方法）|
+| `Qwen3VLNodePostprocessor(BaseNodePostprocessor)` | ~322 | LlamaIndex 节点后处理器：封装 Qwen3-VL-Reranker-2B，支持文本/图片/混合 query 精排 |
+| `Qwen3VLRetrievalEngine` | ~454 | **单例检索引擎**：构建双索引、提供 `search()` 统一入口 |
 
 **Qwen3VLRetrievalEngine 关键方法**：
 
 | 方法 | 行号 | 职责 |
 |---|------|------|
-| `__new__` | ~285 | 单例模式：第一次创建设 `initialized=False`，后续返回同一实例 |
-| `initialize(image_dir, use_reranker=True)` | ~307 | 加载 embedder → 设置全局 `Settings.embed_model` → 加载 caption → 读取图片 → `_build_indices` → 加载共享 Reranker |
-| `_build_indices(documents, image_dir)` | ~348 | 构建**双索引系统**：[1] 图片向量索引（图搜图）[2] 混合检索索引（Qwen3-VL 向量 + BM25）|
-| `search(mode, query, image_path, ...)` | ~450 | 统一入口：按 mode 分发到 `text_to_image_search` 或 `image_to_image_search` |
-| `text_to_image_search(query, ...)` | ~469 | 文搜图：`QueryFusionRetriever` 融合 Qwen3-VL 向量 + BM25，可选 Reranker 精排 |
-| `image_to_image_search(image_path, query, ...)` | ~507 | 图搜图/混合搜：query 图 embedding → Milvus 检索 → 过滤自身 → Reranker 精排 |
-| `_format_results(results)` | ~550 | 转换为前端契约：`id/imageUrl/title/score/relevanceScore/metadata` |
+| `__new__` | ~459 | 单例模式：第一次创建设 `initialized=False`，后续返回同一实例 |
+| `initialize(image_dir, use_reranker=True)` | ~485 | 加载 embedder → 设置全局 `Settings.embed_model` → 加载 caption → 读取图片 → `_build_indices` → 加载共享 Reranker |
+| `_build_indices(documents, image_dir)` | ~535 | 构建**双索引系统**：[1] 图片向量索引（图搜图）[2] 混合检索索引（Qwen3-VL 向量 + BM25）|
+| `search(mode, query, image_path, ...)` | ~650 | 统一入口：按 mode 分发到 `text_to_image_search` 或 `image_to_image_search` |
+| `text_to_image_search(query, ...)` | ~672 | 文搜图：`QueryFusionRetriever` 融合 Qwen3-VL 向量 + BM25，可选 Reranker 精排 |
+| `image_to_image_search(image_path, query, ...)` | ~723 | 图搜图/混合搜：query 图 embedding → Milvus 检索 → 过滤自身 → Reranker 精排 |
+| `_format_results(results)` | ~777 | 转换为前端契约：`id/imageUrl/title/score/relevanceScore/metadata` |
 
 **要点**（项目最关键的设计决策都在这里）：
 - **双索引系统**：图片向量索引（`qwen3_vl_image_only` 集合）专给图搜图用，混合索引（`qwen3_vl_hybrid_agent` 集合 + BM25）专给文搜图用，避免一种索引兼顾两种检索模式
@@ -453,35 +457,73 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 
 ### 5.7 backend/routers/search.py
 
-**作用**：同步检索 HTTP 接口，支持 Mock 模式（不加载模型）与真实模式（调 retrieval_engine）。
+**作用**：同步检索 HTTP 接口，支持 Mock 模式（不加载模型）与真实模式（调 retrieval_engine），检索成功后写检索历史。
 
 **关键函数**：
 
 | 函数 | 行号 | 职责 |
 |---|------|------|
-| `search(request: SearchRequest)` | ~87 | 入口：Mock 模式直接返回 `MOCK_RESULTS[:rerankTopK]`；真实模式调 `retrieval_engine.search()` 转换为 `SearchResponse` |
+| `search(request: SearchRequest)` | ~101 | 入口：Mock 模式直接返回 `MOCK_RESULTS[:rerankTopK]`；真实模式调 `retrieval_engine.search()` 转换为 `SearchResponse`；返回前调 `record_search()` 落库历史 |
 
 **要点**：
 - `USE_MOCK_DATA` 环境变量控制 Mock 开关，用于前端联调（不依赖 GPU 模型）
+- 检索成功后调 `routers/history.py` 的 `record_search(query, mode, result_count, total_time, mock)` 记录一条历史
 - 异常捕获 `traceback.print_exc() + raise HTTPException(500)`，便于排查
-- `processSteps=[]` 始终返回空数组，前端 `ProcessVisualization` 的进度条其实走的是 `processSimulator.ts` 模拟
+- `processSteps=[]` 始终返回空数组，检索进度展示由前端 SearchPage 的骨架屏/pipeline 状态承担
 
 ### 5.8 backend/routers/agent.py
 
-**作用**：SSE 流式 Agent 聊天接口。
+**作用**：SSE 流式 Agent 聊天接口 + 会话重置。
 
 **关键函数**：
 
 | 函数 | 行号 | 职责 |
 |---|------|------|
-| `chat_sse(request: AgentChatRequest)` | ~13 | 接收 message+image（base64），若有图片用 `save_base64_image` 落地，返回 `StreamingResponse(media_type="text/event-stream")` |
+| `chat_sse(request: AgentChatRequest)` | ~22 | 接收 message + image（base64）+ sessionId，若有图片用 `save_base64_image` 落地，返回 `StreamingResponse(media_type="text/event-stream")` |
+| `reset_session(req: SessionResetRequest)` | ~56 | `POST /api/agent/session/reset`：调 `agent_manager.reset_session(session_id)` 清空指定会话记忆 |
 
 **要点**：
 - 用 POST 而非 GET，因为图片 base64 payload 较大，GET 受 URL 长度限制
 - 图片保存失败时 `try/except: pass` 静默降级，Agent 仍可纯文本对话
 - `media_type="text/event-stream"` 是 SSE 标准 MIME，浏览器 `EventSource` 与 `fetch` 都可消费
 
-### 5.9 backend/routers/health.py
+### 5.9 backend/routers/system.py
+
+**作用**：前端"图库页"与"状态页"的数据源，兼图片库管理（列表 / 上传 / 删除 / 热重建索引 / 状态巡检）。
+
+**关键函数**：
+
+| 函数 | 行号 | 职责 |
+|---|------|------|
+| `list_images()` | ~100 | `GET /api/images`：扫描 `DEFAULT_IMAGE_DIR`，返回文件名/URL/大小/时间/caption（与检索引擎同源，保证图库页看到的 = 引擎能搜到的）|
+| `upload_image(file)` | ~108 | `POST /api/images/upload`：multipart 上传入库 |
+| `delete_image(filename)` | ~138 | `DELETE /api/images/{filename}`：删图 |
+| `reindex()` | ~167 | `POST /api/images/reindex`：热重建向量索引，`threading.Lock` 保证同一时刻只允许一个重建任务 |
+| `system_status()` | ~202 | `GET /api/system/status`：汇总后端版本 / Milvus 连通性（socket 探测）/ 引擎初始化 / 四组模型配置 / 图库统计 |
+
+**要点**：
+- 文件名白名单正则 `^[\w\-. ]+\.(png|jpg|jpeg|gif)$` 校验，杜绝路径穿越（`../`）与非法字符
+- `_load_captions()` 本地重实现而不 import retrieval——避免列表接口连带拉起 torch，保证"列表要轻、要快"
+- 状态巡检**全部只读探测，绝不触发引擎初始化**（状态页不应该把服务拖去加载模型）；Milvus 探测用 socket 连通性检查
+
+### 5.10 backend/routers/history.py
+
+**作用**：用标准库 SQLite 持久化每次检索，给前端历史面板提供数据。
+
+**关键函数**：
+
+| 函数 | 行号 | 职责 |
+|---|------|------|
+| `record_search(query, mode, result_count, total_time, mock)` | ~49 | 写入一条检索记录；**任何异常都不抛**——历史是锦上添花，绝不能弄挂检索主流程 |
+| `list_history(limit)` | ~64 | `GET /api/history?limit=20`：倒序返回最近检索 |
+| `clear_history()` | ~93 | `DELETE /api/history`：清空 |
+
+**要点**：
+- 存储位置 `backend/data/history.db`，每次操作开短连接（无长连接、无外部依赖）
+- `PRAGMA journal_mode=WAL` 降低"检索写入 + 前端轮询读取"并发的互锁概率
+- 前端 SearchPage 历史面板点击条目可**一键重发**
+
+### 5.11 backend/routers/health.py
 
 **作用**：极简健康检查路由，用于前后端联通性测试。
 
@@ -489,104 +531,76 @@ routers/agent.py: chat_sse(request: AgentChatRequest)
 
 | 函数 | 行号 | 职责 |
 |---|------|------|
-| `health_check()` | ~9 | `GET /api/health` 返回 `{"status":"ok","service":"multimodal-rag-backend"}` |
-| `ping()` | ~13 | `GET /api/ping` 返回 `{"message":"pong"}` |
+| `health_check()` | ~16 | `GET /api/health` 返回 `{"status":"ok","service":"multimodal-rag-backend"}` |
+| `ping()` | ~21 | `GET /api/ping` 返回 `{"message":"pong"}` |
 
-**要点**：两个接口功能类似，`/health` 用于 K8s/监控探活，`/ping` 用于前端调试。
+**要点**：两个接口功能类似，`/health` 用于 K8s/监控探活，`/ping` 用于前端调试；前端侧栏的在线呼吸灯轮询的就是 `/api/health`。
 
-### 5.10 frontend/src/App.tsx
+### 5.12 frontend/src/types.ts + api.ts（契约层与客户端）
 
-**作用**：前端顶层组件，管理 `currentMode`（retrieval/agent）切换、检索状态、结果列表、对比模式。
+**作用**：`types.ts` 是前后端契约层（与 `backend/schemas.py` 及 routers 返回结构一一对齐）；`api.ts` 是后端 HTTP 客户端——**前端所有页面只通过它访问后端**，请求全部走相对路径由 Vite proxy 转发到 3001。
 
-**关键状态**：
-
-| State | 默认值 | 用途 |
-|---|---|---|
-| `currentMode` | `'retrieval'` | 当前界面模式 |
-| `textQuery` / `uploadedImage` | `''` / `null` | 检索输入 |
-| `searchResults` | `[]` | 检索结果列表 |
-| `recallTopK` / `rerankTopK` / `threshold` | `30 / 6 / 0.5` | 检索参数 |
-| `compareMode` / `selectedResults` | `false` / `Set()` | 对比模式 |
-| `processSteps` / `showProcess` | `[]` / `false` | 检索过程可视化 |
-
-**关键函数**：
+**api.ts 关键导出**：
 
 | 函数 | 行号 | 职责 |
 |---|------|------|
-| `getSearchMode()` | ~48 | 根据 textQuery/uploadedImage 推断 `searchMode`（文搜图/图搜图/混合）|
-| `handleSearch()` | ~55 | 调 `POST /api/search`，更新进度状态与结果 |
-| `handleResultSelect(id)` | ~116 | 对比模式下切换结果选中态 |
-| `useEffect(键盘监听)` | ~134 | `⌘+Enter` 触发检索，`⌘+K` 聚焦输入框 |
+| `searchImages(req)` | ~32 | `POST /api/search` 同步检索 |
+| `fetchImages / uploadImage / deleteImage / reindexImages` | ~44-73 | 图库四件套：列表 / multipart 上传 / 删除 / 热重建索引 |
+| `fetchHistory / clearHistory` | ~77-86 | 检索历史读取与清空 |
+| `fetchStatus / pingHealth` | ~90-104 | 状态页数据 / 侧栏呼吸灯探活 |
+| `resetAgentSession(sessionId)` | ~107 | 重置 Agent 会话记忆 |
+| `streamAgentChat(body, onEvent, signal)` | ~151 | **SSE 流式对话核心**：`fetch` + `ReadableStream` 逐帧解析，按空行切帧、`event:`/`data:` 行解析，单帧 JSON 失败只丢该帧不让整个流崩 |
+| `fileToBase64 / urlToBase64` | ~119-139 | 本地文件 / `/static` 图片 URL → base64 data URL（以图搜图跳转时用）|
 
 **要点**：
-- 检索走真实后端 `/api/search`（不走 mockData），但 `processSimulator` 用于模拟进度条
-- `useEffect` 自动调整 `rerankTopK <= recallTopK`，防止参数倒挂
-- 暗色主题 `bg-[#0F172A]`，shadcn/ui 组件库统一视觉风格
+- Agent SSE 用 `fetch` + `response.body.getReader()` 而非 `EventSource`，因为 `EventSource` 只支持 GET，而 Agent 接口必须 POST 传大体积 base64 图片
+- `TextDecoder(stream: true)` 处理多字节中文字符被 TCP 包从中间截断的情况
+- `types.ts` 顶部注释是团队约定："后端改字段，先改这里"
 
-### 5.11 frontend/src/components/AgentChat.tsx
+### 5.13 frontend/src/App.tsx + components/Sidebar.tsx（应用骨架）
 
-**作用**：Agent 聊天容器，消费 SSE 流，管理消息列表与流式渲染。
+**作用**：`App.tsx`（71 行）是应用骨架——`BrowserRouter` + 左侧栏布局，路由表 `/` 检索、`/agent` 对话、`/gallery` 图库、`/status` 状态，其余路径重定向到 `/`。`Sidebar.tsx`（87 行）是导航 + 健康指示。
 
-**关键状态**：
+**要点**：
+- `<768px` 时侧栏隐藏，`MobileNav`（App.tsx 内）退化为顶部横滑导航，与侧栏共用同一份 `NAV_ITEMS`
+- `useBackendHealth()` 钩子轮询 `pingHealth()`，在线绿灯 / 离线红灯
+- 样式全走 Tailwind 原子类，亮色极简主题（`index.css` 的 `@theme` 定义中文字体栈与等宽字体，锁定单主题不做深浅切换）
 
-| State | 用途 |
+### 5.14 frontend/src/pages/SearchPage.tsx（检索页，546 行）
+
+**作用**：最重的页面。三检索模式（文搜图/图搜图/混合）+ 图片上传 + 召回/精排/阈值参数 + 结果网格 + 历史面板。
+
+**要点**：
+- 示例查询 chips 贴合图片库内容（架构图/流程图为主），点击即填入
+- `searchByResultImage()`：点结果图 → `urlToBase64` → 填入上传区并切"图搜图"模式，实现"以图搜图"连环搜
+- 历史面板：`fetchHistory` 加载最近 20 条，点击条目一键重发，支持一键清空
+- 加载态用骨架屏（`SkeletonGrid`），不再有假进度条模拟器
+
+### 5.15 frontend/src/pages/AgentPage.tsx（Agent 对话页，397 行）
+
+**作用**：SSE 事件流消费与渲染：思考链 `ThinkingLine`、工具调用 `ToolLine`、检索结果卡片（Lightbox 查看）、总结文本。
+
+**要点**：
+- 通过 `api.ts` 的 `streamAgentChat` 消费 6 类事件，逐事件增量更新消息树（`Turn` 结构）
+- "新对话" = `resetAgentSession(旧id)` + 生成新 sessionId，利用 LangGraph `thread_id` 实现会话记忆隔离
+- 支持上传图片提问（`ImageUploader`），结果图可放大查看
+
+### 5.16 frontend/src/pages/GalleryPage.tsx + StatusPage.tsx
+
+**作用**：图库页（250 行）与状态页（193 行）。
+
+| 页面 | 关键能力 |
 |---|---|
-| `messages: Message[]` | 消息历史列表 |
-| `inputValue` / `uploadedImage` | 当前输入 |
-| `isLoading` | 流式加载中 |
+| `GalleryPage` | 图片网格（文件名/大小/时间/caption 标记）；`uploadImage` 上传、`deleteImage` 删除、`reindexImages` 热重建索引（返回 ok/skipped/busy 三态）；`searchWithImage()` 以图搜图跳检索页 |
+| `StatusPage` | 消费 `SystemStatus`：后端版本/Milvus 连通性/引擎初始化三态（`true/false/null`）/四组模型配置（Embedding/Reranker/Agent LLM/Vision LLM）/图库统计，`StatusPill` 红绿灯呈现 |
 
-**关键函数**：
-
-| 函数 | 职责 |
-|---|------|
-| `handleSendMessage()` | POST `/api/agent/chat`，用 `ReadableStream` 解析 SSE 事件，按 event 类型更新消息 |
-| `updateMessage(id, updater)` | 不可变更新某条消息（React 状态更新模式）|
-
-**要点**：
-- SSE 解析用 `fetch` + `response.body.getReader()` 而非 `EventSource`，因为 `EventSource` 只支持 GET
-- 6 类事件对应 `AgentMessage.tsx` 的 6 种 UI 渲染分支
-
-### 5.12 frontend/src/components/UnifiedSearchInput.tsx
-
-**作用**：统一搜索输入组件，集成文本输入、图片上传、召回/精排参数滑块、阈值调节。
-
-**关键 Props**：
-
-| Prop | 用途 |
-|---|------|
-| `textQuery` / `onTextChange` | 文本双向绑定 |
-| `uploadedImage` / `onImageUpload` / `onImageRemove` | 图片上传/移除 |
-| `recallTopK` / `rerankTopK` / `threshold` + onChange | 三参数滑块 |
-
-**要点**：用 shadcn/ui 的 `Slider` `Tooltip` `Input` 组合，参数调节带 tooltip 提示，是参数化检索的典型 UI。
-
-### 5.13 其余前端业务组件（按需读）
+### 5.17 frontend/src/components/*（通用组件）
 
 | 组件 | 行数 | 一句话职责 |
 |---|---|---|
-| `SearchInput.tsx` | 345 | 旧版搜索输入（保留兼容，新界面用 UnifiedSearchInput）|
-| `AgentInput.tsx` | 135 | Agent 输入框 + 发送按钮 |
-| `AgentMessage.tsx` | 324 | 单条消息渲染：思考链/结果卡片/总结/流式光标 |
-| `ResultCard.tsx` | 159 | 结果卡片（带选中态、点击进详情）|
-| `ResultDetail.tsx` | 185 | 结果详情弹窗（含图片大图与元数据）|
-| `ComparisonPanel.tsx` | 144 | 多选结果对比面板 |
-| `ProcessVisualization.tsx` | 115 | 检索过程三步骤进度条 |
-| `QuickExamples.tsx` | 74 | 快捷示例查询 chips |
-| `Header.tsx` | 50 | 顶部导航（检索/Agent 模式切换）|
-| `ImageLightbox.tsx` | 62 | 图片灯箱（点击放大）|
-| `figma/ImageWithFallback.tsx` | 28 | 带兜底的图片组件（加载失败显示占位图）|
-
-### 5.14 frontend/src/utils/*（演示模式模拟器）
-
-**作用**：三个工具文件用于**演示模式**——不连后端时也能在前端模拟检索/Agent 响应的进度与结果。
-
-| 文件 | 关键导出 | 用途 |
-|---|---|---|
-| `mockData.ts` | `generateMockResults(count, query)` / `PRESET_MOCK_RESULTS` | 生成假检索结果 |
-| `processSimulator.ts` | `simulateProgress()` / `simulateRetrievalProcess()` / `delay()` | 模拟进度条更新 |
-| `agentSimulator.ts` | `simulateAgentResponse()` / `addThinkingItem()` | 模拟 Agent 思考链与流式输出 |
-
-**要点**：真实检索走 `/api/search`，真实 Agent 走 `/api/agent/chat`，三个 simulator 主要服务于**离线演示/开发调试**。
+| `ImageUploader.tsx` | 146 | 图片上传（点击/拖拽选图、预览、移除、compact 紧凑模式），检索页与 Agent 页共用 |
+| `Lightbox.tsx` | 135 | 大图灯箱：元信息展示（`formatBytes` 人性化字节数）、"以此图检索"、删除入口；检索页/图库页/Agent 页共用 |
+| `Sidebar.tsx` | 87 | 侧栏导航 + 健康呼吸灯（见 5.13）|
 
 ---
 
@@ -676,7 +690,7 @@ text_to_image_search(query):
 ### 6.5 SSE 事件流协议
 
 ```
-后端 AgentManager.chat_stream         前端 AgentChat.handleSendMessage
+后端 AgentManager.chat_stream         前端 api.ts.streamAgentChat → AgentPage
         │                                       │
         │  event: thinking                      │
         ├──────────────────────────────────────►│ 渲染"正在分析..."
@@ -719,8 +733,11 @@ Settings.embed_model = self.embed_adapter  # 关键一行
 
 | 配置项 | 来源 | 默认值 | 说明 |
 |---|---|---|---|
-| `OPENAI_API_KEY` | `.env` | — | OpenAI / 兼容代理的 API Key |
-| `OPENAI_BASE_URL` | `.env` | `https://api.openai.com/v1` | LLM 端点，可指向国内代理 |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | `.env` | — / `https://api.openai.com/v1` | 旧版兼容配置，Agent/Vision 未单独设置时回退使用 |
+| `AGENT_LLM_MODEL` | `.env` | `gpt-4o` | Agent 推理模型（需支持 function calling）|
+| `AGENT_LLM_API_KEY` / `AGENT_LLM_BASE_URL` | `.env` | 回退 `OPENAI_*` | Agent 模型凭证与端点 |
+| `VISION_LLM_MODEL` | `.env` | `gpt-4o` | Vision 视觉模型（describe_image 用，需支持图片输入）|
+| `VISION_LLM_API_KEY` / `VISION_LLM_BASE_URL` | `.env` | 回退 `OPENAI_*` | Vision 模型凭证与端点 |
 | `MILVUS_URI` | `.env` | `http://localhost:19530` | Milvus 连接串 |
 | `IMAGE_DIR` | `.env` | `backend/data/images` | 被检索的图片库路径 |
 | `MODELSCOPE_CACHE` | 环境变量 | `backend/data/models` | ModelScope 模型缓存目录 |
@@ -734,22 +751,30 @@ Settings.embed_model = self.embed_adapter  # 关键一行
 ```
 代码硬编码默认值
     ↑ （最低）
-.env 文件 (load_dotenv override=True)
-    ↑ （覆盖代码默认）
-系统环境变量
-    ↑ （最高，因 override=True 不覆盖系统变量则反过来）
+.env 文件 (load_dotenv override=False，只补缺)
+    ↑
+系统环境变量（最高优先，不被 .env 覆盖）
 ```
 
-**要点**：`load_dotenv(override=True)` 的 `override` 参数表示 `.env` 文件**覆盖**已存在的环境变量；若想系统环境变量优先，改为 `override=False`。
+**要点**：`load_dotenv(override=False)` 表示已存在的系统环境变量**优先**，`.env` 只补没有的项。这正是 `USE_MOCK_DATA=true python -m backend.main` 命令行临时开关能生效的原因——若改成 `override=True`，`.env` 里写死的 `USE_MOCK_DATA=false` 会反过来覆盖命令行传入的 `true`。
 
 ### 7.3 .env 文件示例
 
+完整模板见 `backend/.env.example`（含 DeepSeek / 通义 / GLM / Ollama 多厂商示例）。最小可用配置：
+
 ```bash
-# 必填
+# 简单模式：Agent 与 Vision 共用一个模型
 OPENAI_API_KEY=sk-xxxxx
 
+# 进阶模式：Agent 与 Vision 分别指定（均可省略回退到 OPENAI_*）
+AGENT_LLM_MODEL=qwen3.5-omni-flash
+AGENT_LLM_API_KEY=sk-your-dashscope-key
+AGENT_LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+VISION_LLM_MODEL=qwen3.5-omni-plus-2026-03-15
+VISION_LLM_API_KEY=sk-your-dashscope-key
+VISION_LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
 # 可选（有默认值）
-OPENAI_BASE_URL=https://api.openai.com/v1
 MILVUS_URI=http://localhost:19530
 IMAGE_DIR=/path/to/your/images
 USE_MOCK_DATA=false
@@ -783,20 +808,17 @@ docker-compose up -d
 mkdir -p backend/data/images
 # 把你的图片（.png/.jpg/.jpeg/.gif）放到 backend/data/images/
 
-# 3️⃣ 配置 .env
+# 3️⃣ 配置 .env（从模板复制后编辑，至少设置一个可用 Key）
 cd backend
-cat > .env <<'EOF'
-OPENAI_API_KEY=sk-your-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-MILVUS_URI=http://localhost:19530
-USE_MOCK_DATA=false
-EOF
+cp .env.example .env    # Windows CMD 用:copy .env.example .env
+# 简单模式：只填 OPENAI_API_KEY；进阶模式：AGENT_LLM_* 与 VISION_LLM_* 分别指定
 
-# 4️⃣ 安装后端依赖（建议用 venv）
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS/Linux
-pip install -r requirements.txt
+# 4️⃣ 安装后端依赖（推荐 uv，也可用 venv + pip）
+# 在项目根目录执行
+uv venv .venv
+source .venv/Scripts/activate   # Git Bash
+# .venv\Scripts\activate        # CMD / PowerShell
+uv pip install -r requirements.txt
 
 # 5️⃣ 启动后端（首次启动会下载 Qwen3-VL 模型，约 4-8GB，需 10-30 分钟）
 python -m backend.main
@@ -811,9 +833,11 @@ npm install
 npm run dev
 # 浏览器自动打开 http://localhost:3000
 
-# 7️⃣ 体验检索
-#    - 检索模式：输入文本或上传图片，点"开始检索"
-#    - Agent 模式：顶部切换到 Agent，自然语言对话
+# 7️⃣ 体验四页面
+#    - 检索页 /：输入文本或上传图片，点"开始检索"；历史面板一键重发
+#    - Agent 页 /agent：自然语言对话，实时观察思考链与工具调用
+#    - 图库页 /gallery：上传/删除图片后点"重建索引"（热更新）
+#    - 状态页 /status：查看 Milvus/引擎/模型配置是否正常
 ```
 
 ### 8.3 测试与调试
@@ -858,7 +882,7 @@ python debug_agent_post.py   # 测 Agent POST
 | 2 | 跑通 Milvus + 同步检索 | 1-2 天 | Docker + LlamaIndex + Milvus |
 | 3 | 集成 Qwen3-VL 嵌入 + Reranker | 2-3 天 | PyTorch + Transformers + 模型加载 |
 | 4 | 接入 LangGraph Agent + SSE | 2-3 天 | LangChain 1.x + LangGraph |
-| 5 | 完整前端聊天+检索 UI | 3-5 天 | React 状态管理 + SSE 解析 + shadcn/ui |
+| 5 | 完整前端四页面 UI（检索/Agent/图库/状态）| 3-5 天 | React Router + Tailwind CSS 4 + SSE 解析 |
 
 ### 9.2 学习资源表
 
@@ -877,8 +901,8 @@ python debug_agent_post.py   # 测 Agent POST
 2. 跑通 Mock 模式，理解前后端数据流（`config.py` → `schemas.py` → `main.py` → `routers/search.py`）
 3. 深入 `core/retrieval.py`，理解双索引与三路召回（结合第 6 章设计模式）
 4. 深入 `core/agent.py`，理解 LangGraph Agent 与 SSE 事件分发
-5. 读前端 `App.tsx` 与 `AgentChat.tsx`，理解 SSE 事件消费与 UI 渲染
-6. 按需读其余组件，理解 UI 细节
+5. 读前端 `api.ts`（SSE 解析）与 `pages/AgentPage.tsx`（事件渲染），理解流式链路两端
+6. 按需读其余页面与组件（SearchPage / GalleryPage / StatusPage），理解 UI 细节
 
 ---
 
@@ -906,11 +930,11 @@ python debug_agent_post.py   # 测 Agent POST
 
 ### Q6: 前端能用 EventSource 而非 fetch 消费 SSE 吗？
 
-**A**：不能。`EventSource` 只支持 GET 请求，而 Agent 接口需要 POST（带 image base64 payload 大）。所以 `AgentChat.tsx` 用 `fetch` + `response.body.getReader()` 手动解析 SSE 格式。
+**A**：不能。`EventSource` 只支持 GET 请求，而 Agent 接口需要 POST（带 image base64 payload 大）。所以 `api.ts` 的 `streamAgentChat` 用 `fetch` + `response.body.getReader()` 手动解析 SSE 格式。
 
 ### Q7: 如何切换 OpenAI 兼容代理（如 Azure、国内中转）？
 
-**A**：在 `.env` 设置 `OPENAI_BASE_URL=https://your-proxy.com/v1`，代码用 `ChatOpenAI(base_url=OPENAI_BASE_URL)` 自动适配，只要代理兼容 OpenAI Chat Completions API 即可。
+**A**：Agent 与 Vision 可分别配置——`.env` 里设置 `AGENT_LLM_BASE_URL` / `VISION_LLM_BASE_URL`（未设置时回退 `OPENAI_BASE_URL`），代码用 `ChatOpenAI(base_url=...)` 自动适配，只要代理兼容 OpenAI Chat Completions API 即可。注意 Agent 模型需支持 function calling，Vision 模型需支持图片输入。
 
 ### Q8: 为什么检索结果里 `score` 是 0-100 而 `relevanceScore` 是 0-1？
 
@@ -941,7 +965,7 @@ python debug_agent_post.py   # 测 Agent POST
 ---
 
 **要点（全文总结）**：
-1. GalleryMind 是一个**完整的工业级多模态 RAG 样本项目**，覆盖检索与 Agent 两条路径
-2. 核心架构 = **Qwen3-VL 嵌入 + Milvus 双索引 + BM25 + RRF 融合 + Qwen3-VL Reranker + LangGraph Agent + SSE 流式**
-3. 推荐阅读顺序：`config.py` → `schemas.py` → `main.py` → `routers/*` → `core/agent.py` → `core/retrieval.py`（最大最关键）→ 前端 `App.tsx` → `AgentChat.tsx`
-4. 跑通项目最关键的三步：`docker-compose up -d`（Milvus）+ 配置 `.env`（OpenAI Key）+ `python -m backend.main`（首次会下载模型）
+1. GalleryMind 是一个**完整的工业级多模态 RAG 样本项目**，覆盖检索与 Agent 两条路径，并带图库管理、检索历史、系统状态巡检等配套能力
+2. 核心架构 = **Qwen3-VL 嵌入 + Milvus 双索引 + BM25 + RRF 融合 + Qwen3-VL Reranker + LangGraph Agent + SSE 流式**；前端为 React Router 四页面 SPA（Tailwind CSS 4）
+3. 推荐阅读顺序：`config.py` → `schemas.py` → `main.py` → `routers/*` → `core/agent.py` → `core/retrieval.py`（最大最关键）→ 前端 `api.ts` → `pages/*`
+4. 跑通项目最关键的三步：`docker-compose up -d`（Milvus）+ 配置 `.env`（从 `.env.example` 复制，至少一个可用 Key）+ `python -m backend.main`（首次会下载模型）

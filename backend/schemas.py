@@ -62,3 +62,8 @@ class InitResponse(BaseModel):
 class AgentChatRequest(BaseModel):
     message: str                                         # 用户消息文本
     image: Optional[str] = None # Base64 string          # 可选图片(base64),Agent 调 describe_image 时用
+    sessionId: Optional[str] = None                      # 会话 ID(LangGraph thread_id);不传用默认会话,前端"新对话"时生成新 id
+
+# SessionResetRequest:重置指定 Agent 会话的记忆(InMemorySaver 按 thread_id 清空)
+class SessionResetRequest(BaseModel):
+    sessionId: str = "session_default"                   # 要重置的会话 ID

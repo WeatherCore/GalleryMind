@@ -8,54 +8,61 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 加载 .env(override=True 表示 .env 文件覆盖已存在的环境变量;
-# 若想让系统环境变量优先,改为 override=False)
-load_dotenv(override=True)
+# 加载 .env(override=False 表示已存在的环境变量优先, .env 只补缺:
+# 这样 USE_MOCK_DATA=true python -m backend.main 这类命令行临时开关才能生效,
+# 否则 .env 里写死的 USE_MOCK_DATA=false 会反过来覆盖命令行传的 true)
+load_dotenv(override=False)
 
-# 基础路径(BASE_DIR = backend/,所有相对路径都从这里派生,避免 working directory 依赖)
-#  __file__ 当前这个配置文件的完整路径；resolve()拿到绝对路径；.parent取文件所在文件夹
+# 基础路径(BASE_DIR = backend/，所有相对路径都从这里派生，避免 working directory 依赖)
+# 1. `Path(__file__)`：拿到当前`config.py`文件的路径对象
+# 2. `.resolve()`：解析成绝对路径，自动处理相对路径、软链接，消除`../`这类符号，得到完整真实路径
+# 3. `.parent`：取【文件所在的文件夹】
 BASE_DIR = Path(__file__).resolve().parent 
-# 再往上跳一级，得到项目根目录
+
+# 再往上跳一级，得到项目根目录 GalleryMind/
 PROJECT_ROOT = BASE_DIR.parent
 
-# backend/data
+# backend/data，这个文件夹是项目所有本地数据的总仓库：上传图片、缓存、向量库文件都放这里
 DATA_DIR = BASE_DIR / "data"  
-# 存放用户上传的原始文件
+# backend/data/uploads，`save_base64_image`工具函数保存用户上传图片的目录
 UPLOAD_DIR = DATA_DIR / "uploads"
-# 存放下载下来的大模型权重文件
-MODEL_CACHE_DIR = DATA_DIR / "models"
+# 模型缓存目录，Qwen3-VL-Embedding、Reranker 权重下载到这里（优先读 .env 的 MODELSCOPE_CACHE，未设置则用默认目录）
+MODEL_CACHE_DIR = Path(os.getenv("MODELSCOPE_CACHE", str(DATA_DIR / "models")))
+
 # 图片描述文本缓存目录
-# 多模态 RAG 场景：图片传给大模型生成图片描述 caption，把图片对应的 caption 文本缓存到这个文件夹
+# 多模态 RAG 在预处理图库时，会调用 VL 模型生成图片 caption，把结果缓存到这里，避免重复调用大模型，节省算力
 CAPTION_CACHE_DIR = DATA_DIR / "caption_cache"
 
 # 创建必要目录(parents+exist_ok 保证幂等:目录已存在不报错,父目录不存在自动建)
-# 业务场景：程序启动读取 config 配置的时候，自动把这三个业务目录全部准备好，不然第一次跑项目，文件夹还没建立。后面代码往UPLOAD_DIR保存用户上传图片，就会报文件夹不存在的错误
+# 业务场景：程序启动时读取 config 配置的时候，自动把这三个业务目录全部准备好，不然第一次跑项目，文件夹还没建立。后面代码往UPLOAD_DIR保存用户上传图片，就会报文件夹不存在的错误
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CAPTION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# 这是"被检索的图片库"—— SimpleDirectoryReader 会扫描这里所有 .png/.jpg/.jpeg/.gif
-# 默认指向项目内 data/images，但是也可以通过环境变量覆盖，指向其他目录
+# 这是项目原始图库目录，也就是提前入库、做向量检索的图片库，区分于用户实时上传的 uploads 临时图片
+# 默认指向项目内 backend/data/images，但是也可以通过环境变量覆盖，指向其他目录
 DEFAULT_IMAGE_DIR = Path(os.getenv("IMAGE_DIR", str(DATA_DIR / "images")))
 if not DEFAULT_IMAGE_DIR.exists():
     DEFAULT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# 从.env读取密钥、接口地址、向量数据库地址；没有就读取写死的默认值
+# 从.env读取密钥、接口地址等配置
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
+DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL")
 
 # Agent 推理模型配置（AgentManager 初始化时创建，负责工具调度与最终回答）
-# 未设置时回退到 OPENAI_API_KEY / OPENAI_BASE_URL，兼容旧 .env
-AGENT_LLM_MODEL = os.getenv("AGENT_LLM_MODEL", "gpt-4o")
-AGENT_LLM_API_KEY = os.getenv("AGENT_LLM_API_KEY", OPENAI_API_KEY)
-AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", OPENAI_BASE_URL)
+# 未设置时回退到 DASHSCOPE_API_KEY / DASHSCOPE_BASE_URL
+AGENT_LLM_MODEL = os.getenv("AGENT_LLM_MODEL", "qwen3.5-omni-flash")
+AGENT_LLM_API_KEY = os.getenv("AGENT_LLM_API_KEY", DASHSCOPE_API_KEY)
+AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", DASHSCOPE_BASE_URL)
 
 # Vision 视觉模型配置（describe_image 工具用，需要支持多模态图片输入）
-# 未设置时回退到 OPENAI_API_KEY / OPENAI_BASE_URL，兼容旧 .env
-VISION_LLM_MODEL = os.getenv("VISION_LLM_MODEL", "gpt-4o")
-VISION_LLM_API_KEY = os.getenv("VISION_LLM_API_KEY", OPENAI_API_KEY)
-VISION_LLM_BASE_URL = os.getenv("VISION_LLM_BASE_URL", OPENAI_BASE_URL)
+# 未设置时回退到 DASHSCOPE_API_KEY / DASHSCOPE_BASE_URL
+VISION_LLM_MODEL = os.getenv("VISION_LLM_MODEL", "qwen3.5-omni-plus")
+VISION_LLM_API_KEY = os.getenv("VISION_LLM_API_KEY", DASHSCOPE_API_KEY)
+VISION_LLM_BASE_URL = os.getenv("VISION_LLM_BASE_URL", DASHSCOPE_BASE_URL)
 
 # Milvus URI:Docker Compose 默认暴露 19530 端口
 MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")

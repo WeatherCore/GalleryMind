@@ -10,17 +10,13 @@ from pathlib import Path
 
 from backend.schemas import SearchRequest, SearchResponse, SearchResult
 from backend.core.utils import save_base64_image
-from backend.config import UPLOAD_DIR
+from backend.config import UPLOAD_DIR, USE_MOCK_DATA
 from backend.routers.history import record_search
 
 # 创建独立路由实例，相当于一个子路由容器
 router = APIRouter(prefix="/api/search", tags=["Multimodal Search"])
 
-# 读取环境变量 Mock 模式开关（用于快速测试前后端联动，无需加载模型）
-# 默认关闭 Mock 模式，启用真实检索
-# [补充] 设计意图:让纯前端开发者无需 GPU/模型也能跑通前后端联调;
-# 启动命令 USE_MOCK_DATA=true python -m backend.main 即可激活
-USE_MOCK_DATA = os.environ.get("USE_MOCK_DATA", "false").lower() == "true"
+# Mock 模式开关统一从 backend.config 导入(USE_MOCK_DATA),启动命令:USE_MOCK_DATA=true python -m backend.main
 
 # Mock 模式的硬编码假结果列表 - 使用实际存在的图片文件
 # 这 6 条假数据模拟真实检索结果结构(含 imageUrl/score/relevanceScore/metadata/tags),

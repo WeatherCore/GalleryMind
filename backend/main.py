@@ -12,15 +12,19 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
+# 明明我们刚才才在 config.py 里写了很多业务路径（图片缓存、上传文件夹）
+# 但是下面 sys.path 代码又用了新的路径，这是为什么？
+
 # 添加项目根目录到 sys.path，使得可以在 backend 目录下直接运行，这样既支持 python main.py 也支持 python -m backend.main
 # 这段只在 __main__ 块内执行,避免被 import 时副作用
 if __name__ == "__main__":
-    # main.py 所在的文件夹，也就是 backend 文件夹
+    # main.py 所在的文件夹，也就是 backend/ 文件夹
     current_dir = os.path.dirname(os.path.abspath(__file__))
     # backend 的上一级，整个项目的根文件夹，也就是 GalleryMind/
+
     parent_dir = os.path.dirname(current_dir)
-    # 手动把「项目根目录」塞进 Python 的模块搜索路径列表第 0 位，优先级最高，优先在这里找包
-    # 让32行和33行的from backend.config import ... 这种导入能找到 backend 包，这个他要求 sys.path 含项目根目录(GalleryMind/),否则 Python 找不到 backend 包
+    # 手动把「项目根目录」塞进`sys.path`= Python 解释器专门用来【寻找 Python 包 / 模块】的搜索目录列表第 0 位，优先级最高，优先在这里找包
+    # 让32行和33行的from backend.config import ... 这种导入能正常工作能找到 backend 包，这个他要求 sys.path 含项目根目录(GalleryMind/),否则 Python 找不到 backend 包
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
 # 启动方式	                            sys.path 里有没有根目录	              结果
@@ -28,12 +32,16 @@ if __name__ == "__main__":
 # python -m backend.main（在根目录下）	  ✅ 天然包含根目录	          这段代码只是检查后跳过
 
 # Java 的导入靠的是 classpath（类路径），跟 Python 的 sys.path 是同一个东西，不过Maven/Gradle 会自动把依赖和项目路径配进 classpath
-# 如果强制只允许在根目录下执行 python -m backend.main 来启动，那段 sys.path 代码确实可以删。python -m 会把当前工作目录（而不是脚本所在目录）自动加进 sys.path——只要用户在项目根目录 GalleryMind/ 下执行，from backend.config import ... 天然能找到，那段 if 检查会发现根目录已在列表里、直接跳过
+# 如果强制只允许在根目录下执行 python -m backend.main 来启动，那段 sys.path 代码确实可以删。
+# 因为 python -m 会把当前工作目录（而不是脚本所在目录）自动加进 sys.path——只要用户在项目根目录 GalleryMind/ 下执行，from backend.config import ... 天然能找到，那段 if 检查会发现根目录已在列表里、直接跳过
 
 # 导入配置
 from backend.config import DATA_DIR, UPLOAD_DIR, HOST, PORT, ALLOWED_ORIGINS
-from backend.routers import search, agent, health
-
+from backend.routers import search, agent, health, system, history
+# Python 的工作逻辑：
+# 1.看到backend，认为这是一个包 (package)
+# 2.遍历sys.path里面的所有目录，挨个进去看：里面有没有叫backend的文件夹，并且文件夹里有__init__.py
+# 3.找到之后，才继续找backend.config模块，拿到里面DATA_DIR变量
 
 # lifespan（应用生命周期【重中之重】）是 FastAPI 的新写法，替代了旧版教程里的 @app.on_event("startup") / @app.on_event("shutdown")
 # 启动时:自动预热模型(Qwen3-VL 模型加载耗时数十秒,必须启动期完成,不能等首请求)
@@ -44,12 +52,29 @@ async def lifespan(app: FastAPI):
     # ──────── yield 之前：应用【启动】时执行 ────────
     print(f"🚀 Server starting on {HOST}:{PORT}")
     print(f"📂 Static files mounted at: {DATA_DIR} -> /static")
+    # 启动第一时间打印日志，HOST/PORT/DATA_DIR 全部来自backend/config.py。
+    # 提示开发者：静态文件夹映射地址，就是前面get_image_url()生成/static/xxx图片链接对应的本地目录
 
-    # 这里用局部 import 而非顶部 import,是为了延迟加载(只在真正启动时才导入 torch/transformers 等重依赖)
+    # [MOCK 守卫] USE_MOCK_DATA=true 时跳过引擎与 Agent 的启动初始化，让纯前端联调不依赖 Milvus/GPU/模型
+    # (与 routers/search.py 读同一个环境变量;Agent 侧有懒初始化兜底,首次对话时才 initialize)
+    if os.environ.get("USE_MOCK_DATA", "false").lower() == "true":
+        print("🧪 [MOCK MODE] 跳过检索引擎与 Agent 启动初始化(纯前端联调模式)")
+        yield
+        print("👋 Server shutting down")
+        return
+    # 业务价值：
+    # 前端开发调试页面的时候，不需要下载大模型、启动 Milvus 向量库。后端直接返回假数据，快速调页面交互，不用等几十秒加载 Qwen3-VL 嵌入 / 重排模型，节省大量时间
+
     print("⏳ 初始化检索引擎...")
+
+    # 延迟导入 lazy import，非常关键的工程技巧
+    # 为什么这么设计？
+    # 1.如果写在文件头部：只要导入 main.py，就立刻加载 retrieval、agent 模块，连带加载大模型相关代码；哪怕是 mock 模式，也会导入重依赖包，浪费时间
+    # 2.写在 lifespan 内部：只有非 mock 模式，代码走到这里，才会执行 import。Mock 模式直接跳过这三行导入，完全不加载模型相关代码
     from .core.retrieval import retrieval_engine
     from .core.agent import agent_manager
     from .config import DEFAULT_IMAGE_DIR
+    
     # 检索引擎初始化，加载 embedding 模型、连接 Milvus 向量库、加载图片素材
     retrieval_engine.initialize(DEFAULT_IMAGE_DIR)
     # Agent 管理器初始化，初始化大模型客户端
@@ -109,6 +134,8 @@ else:
 app.include_router(health.router)  # 健康检查路由 (优先)
 app.include_router(search.router)
 app.include_router(agent.router)
+app.include_router(system.router)  # 图库列表 + 系统状态 (只读)
+app.include_router(history.router)  # 检索历史 (SQLite 持久化)
 
 # 根路由:简单探活端点,无需认证,用于反向代理/CDN 健康检查
 @app.get("/")

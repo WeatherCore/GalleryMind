@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from backend.config import (
     CAPTION_CACHE_DIR, DEFAULT_IMAGE_DIR, MILVUS_URI,
     EMBEDDING_MODEL_MS, RERANKER_MODEL_MS,
-    AGENT_LLM_MODEL, VISION_LLM_MODEL,
+    AGENT_LLM_MODEL, VISION_LLM_MODEL, USE_MOCK_DATA,
 )
 
 # 创建独立路由实例，相当于一个子路由容器
@@ -368,6 +368,6 @@ def system_status():
             "visionLlm": VISION_LLM_MODEL,
         },
         "gallery": {"dir": str(DEFAULT_IMAGE_DIR), "count": image_count},
-        "mockMode": os.environ.get("USE_MOCK_DATA", "false").lower() == "true",
+        "mockMode": USE_MOCK_DATA,
         "timestamp": time.time(),
     }

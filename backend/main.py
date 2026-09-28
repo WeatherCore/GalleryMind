@@ -36,7 +36,7 @@ if __name__ == "__main__":
 # 因为 python -m 会把当前工作目录（而不是脚本所在目录）自动加进 sys.path——只要用户在项目根目录 GalleryMind/ 下执行，from backend.config import ... 天然能找到，那段 if 检查会发现根目录已在列表里、直接跳过
 
 # 导入配置
-from backend.config import DATA_DIR, UPLOAD_DIR, HOST, PORT, ALLOWED_ORIGINS
+from backend.config import DATA_DIR, UPLOAD_DIR, HOST, PORT, ALLOWED_ORIGINS, USE_MOCK_DATA
 from backend.routers import search, agent, health, system, history
 # Python 的工作逻辑：
 # 1.看到backend，认为这是一个包 (package)
@@ -56,8 +56,8 @@ async def lifespan(app: FastAPI):
     # 提示开发者：静态文件夹映射地址，就是前面get_image_url()生成/static/xxx图片链接对应的本地目录
 
     # [MOCK 守卫] USE_MOCK_DATA=true 时跳过引擎与 Agent 的启动初始化，让纯前端联调不依赖 Milvus/GPU/模型
-    # (与 routers/search.py 读同一个环境变量;Agent 侧有懒初始化兜底,首次对话时才 initialize)
-    if os.environ.get("USE_MOCK_DATA", "false").lower() == "true":
+    # (统一从 config.USE_MOCK_DATA 读取;Agent 侧有懒初始化兜底,首次对话时才 initialize)
+    if USE_MOCK_DATA:
         print("🧪 [MOCK MODE] 跳过检索引擎与 Agent 启动初始化(纯前端联调模式)")
         yield
         print("👋 Server shutting down")

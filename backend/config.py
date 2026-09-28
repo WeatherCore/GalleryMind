@@ -1,5 +1,5 @@
 # config.py(配置中枢):项目所有可调参数的中枢。它解决三个核心问题:
-#  1. 凭证安全:OpenAI Key、Milvus URI 等敏感信息从 .env 加载,不硬编码进源码
+#  1. 凭证安全:模型服务密钥(OpenAI 兼容接口)、Milvus URI 等敏感信息从 .env 加载,不硬编码进源码
 #  2. 路径布局:统一管理图片库、上传目录、模型缓存、caption 缓存的路径
 #  3. 启动可用性:启动时自动创建必要目录,避免运行时 FileNotFoundError
 # 调用方:main.py 启动时导入、core/retrieval.py 与 core/agent.py 运行时读取
@@ -18,9 +18,6 @@ load_dotenv(override=False)
 # 2. `.resolve()`：解析成绝对路径，自动处理相对路径、软链接，消除`../`这类符号，得到完整真实路径
 # 3. `.parent`：取【文件所在的文件夹】
 BASE_DIR = Path(__file__).resolve().parent 
-
-# 再往上跳一级，得到项目根目录 GalleryMind/
-PROJECT_ROOT = BASE_DIR.parent
 
 # backend/data，这个文件夹是项目所有本地数据的总仓库：上传图片、缓存、向量库文件都放这里
 DATA_DIR = BASE_DIR / "data"  
@@ -46,26 +43,30 @@ if not DEFAULT_IMAGE_DIR.exists():
     DEFAULT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# 从.env读取密钥、接口地址等配置
+# 从 .env 读取模型服务密钥与接口地址
+# 客户端使用 OpenAI 兼容协议，因此这里作为"保底"默认：任何 OpenAI 兼容服务
+# （OpenAI / 通义百炼 / DeepSeek / GLM / 本地 Ollama 等）都能接入，只需改 BASE_URL 与 KEY
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
-DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 
 # Agent 推理模型配置（AgentManager 初始化时创建，负责工具调度与最终回答）
-# 未设置时回退到 DASHSCOPE_API_KEY / DASHSCOPE_BASE_URL
+# 未设置时回退到 OPENAI_API_KEY / OPENAI_BASE_URL（OpenAI 兼容接口，保底默认）
 AGENT_LLM_MODEL = os.getenv("AGENT_LLM_MODEL", "qwen3.5-omni-flash")
-AGENT_LLM_API_KEY = os.getenv("AGENT_LLM_API_KEY", DASHSCOPE_API_KEY)
-AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", DASHSCOPE_BASE_URL)
+AGENT_LLM_API_KEY = os.getenv("AGENT_LLM_API_KEY", OPENAI_API_KEY)
+AGENT_LLM_BASE_URL = os.getenv("AGENT_LLM_BASE_URL", OPENAI_BASE_URL)
 
 # Vision 视觉模型配置（describe_image 工具用，需要支持多模态图片输入）
-# 未设置时回退到 DASHSCOPE_API_KEY / DASHSCOPE_BASE_URL
+# 未设置时回退到 OPENAI_API_KEY / OPENAI_BASE_URL（OpenAI 兼容接口，保底默认）
 VISION_LLM_MODEL = os.getenv("VISION_LLM_MODEL", "qwen3.5-omni-plus")
-VISION_LLM_API_KEY = os.getenv("VISION_LLM_API_KEY", DASHSCOPE_API_KEY)
-VISION_LLM_BASE_URL = os.getenv("VISION_LLM_BASE_URL", DASHSCOPE_BASE_URL)
+VISION_LLM_API_KEY = os.getenv("VISION_LLM_API_KEY", OPENAI_API_KEY)
+VISION_LLM_BASE_URL = os.getenv("VISION_LLM_BASE_URL", OPENAI_BASE_URL)
 
 # Milvus URI:Docker Compose 默认暴露 19530 端口
 MILVUS_URI = os.getenv("MILVUS_URI", "http://localhost:19530")
+
+# Mock 模式开关:开启后跳过模型/向量库加载,直接返回假数据,用于纯前端联调与 CI
+# 启动命令:USE_MOCK_DATA=true python -m backend.main
+USE_MOCK_DATA = os.getenv("USE_MOCK_DATA", "false").lower() == "true"
 
 # Model IDs(ModelScope 上的 Qwen3-VL 模型 ID;首次启动会下载到 MODEL_CACHE_DIR)
 # EMBEDDING:把文本/图片编码为 512 维向量,Milvus 索引的"指纹"

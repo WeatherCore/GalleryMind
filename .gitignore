@@ -1,3 +1,16 @@
+# macOS
+.DS_Store
+
+# 运行时数据
+backend/data/uploads/
+backend/data/models/
+backend/data/*.db
+
+# Docker 卷
+volumes/
+
+*.tsbuildinfo
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -320,7 +320,7 @@ GalleryMind/
 ### 1️⃣ 启动 Milvus 向量数据库
 
 ```bash
-cd D:/1/GalleryMind
+cd D:/GalleryMind
 docker-compose up -d
 
 # 验证三个容器启动
@@ -359,9 +359,19 @@ uv venv .venv
 source .venv/Scripts/activate   # Git Bash
 # .venv\Scripts\activate        # CMD / PowerShell
 
-# 3. 按 requirements.txt 装依赖
+# 3. ⚠️ 先装 CUDA 版 torch（有 NVIDIA 显卡时必做，否则 PyPI 默认给 CPU 版拖死检索）
+#    CUDA 版只在 PyTorch 官方 index 分发，版本号同为 2.9.0，必须用 --index-url 单独装
+uv pip install torch==2.9.0 torchvision==0.24.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+#    cu121 = CUDA 12.1，RTX 30/40 系原生支持；找不到 wheel 可改 cu124 或 cu118
+#    验证：python -c "import torch;print(torch.cuda.is_available())"  → 期望 True
+
+# 4. 再装其余依赖（torch 已装好，pip 会跳过不覆盖）
 uv pip install -r requirements.txt
 ```
+
+> 💡 **无 GPU 用户**：跳过第 3 步直接第 4 步（会装 CPU 版 torch，检索 30-60 秒/次，仅适合功能验证）；
+> 或走 Mock 模式 `USE_MOCK_DATA=true` 启动，不加载任何模型即可联调前后端。详见下方[Mock 模式](#-mock-模式)。
 
 ### 5️⃣ 启动后端
 

@@ -27,7 +27,24 @@ langgraph==1.0.5
 # Transformers (用于 Qwen3-VL 模型)
 transformers==4.57.1
 
-# PyTorch (深度学习框架)
+# PyTorch (深度学习框架) — ⚠️ 必须装 CUDA 版,不能直接走 PyPI
+# ----------------------------------------------------------------
+# 原因:Windows 上 PyPI 默认给的是 CPU 版 wheel(torch==2.9.0+cpu),
+#       cuda_available=False,会拖死 Qwen3-VL 检索(单次重排 100+ 秒)。
+#       CUDA 版只通过 PyTorch 官方 index 分发,版本号同样是 2.9.0,
+#       所以光写 torch==2.9.0 无法区分来源,必须用 --index-url 单独装。
+#
+# 正确安装(项目根目录,先激活 .venv):
+#   1) 先装 CUDA 版 torch(完全替换 PyPI index):
+#        uv pip install torch==2.9.0 torchvision==0.24.0 \
+#            --index-url https://download.pytorch.org/whl/cu121
+#   2) 再装其余依赖(torch 已装好,pip 会跳过不覆盖):
+#        uv pip install -r requirements.txt
+#
+# 显存/CUDA 选型:cu121 = CUDA 12.1,RTX 40 系(含 4060)原生支持;
+#                 若 cu121 找不到对应 wheel,可改 cu124 或 cu118。
+# 验证:python -c "import torch;print(torch.cuda.is_available())" → True
+# ----------------------------------------------------------------
 torch==2.9.0
 torchvision==0.24.0
 

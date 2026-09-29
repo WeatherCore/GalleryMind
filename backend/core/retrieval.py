@@ -235,7 +235,8 @@ class Qwen3VLEmbedding:
             images=image_inputs,       # 传入提取好的图片，图片做 resize、归一化、转张量
             videos=video_inputs,       # 
             return_tensors="pt",       # 输出 PyTorch tensor 张量
-            padding=True               # 自动补 padding，保证 batch 内长度对齐
+            padding=True,              # 自动补 padding，保证 batch 内长度对齐
+            truncation=True            # 启用截断策略让 max_length 生效(否则 transformers 会警告 max_length 被忽略)，超长输入截到模型上限
         ).to(self.device) 
         # .to(self.device)：把所有张量（input_ids、pixel_values 等）搬运到 cuda/mps/cpu，和模型在同一个设备，必须加这一步！否则会出现 “数据和模型不在同一个设备” 的报错，导致推理失败
 

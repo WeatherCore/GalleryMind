@@ -25,6 +25,9 @@ DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 # 模型缓存目录，Qwen3-VL-Embedding、Reranker 权重下载到这里（优先读 .env 的 MODELSCOPE_CACHE，未设置则用默认目录）
 MODEL_CACHE_DIR = Path(os.getenv("MODELSCOPE_CACHE", str(DATA_DIR / "models")))
+# 相对路径锚定到项目根目录(backend/ 的上一级),避免从 backend/ 目录启动时被解析成 backend/backend/...
+if not MODEL_CACHE_DIR.is_absolute():
+    MODEL_CACHE_DIR = (BASE_DIR.parent / MODEL_CACHE_DIR).resolve()
 
 # 图片描述文本缓存目录
 # 多模态 RAG 在预处理图库时，会调用 VL 模型生成图片 caption，把结果缓存到这里，避免重复调用大模型，节省算力
@@ -39,6 +42,9 @@ CAPTION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # 这是项目原始图库目录，也就是提前入库、做向量检索的图片库，区分于用户实时上传的 uploads 临时图片
 # 默认指向项目内 backend/data/images，但是也可以通过环境变量覆盖，指向其他目录
 DEFAULT_IMAGE_DIR = Path(os.getenv("IMAGE_DIR", str(DATA_DIR / "images")))
+# 相对路径锚定到项目根目录,避免从 backend/ 目录启动时 SimpleDirectoryReader 解析到 backend/backend/... 找不到图
+if not DEFAULT_IMAGE_DIR.is_absolute():
+    DEFAULT_IMAGE_DIR = (BASE_DIR.parent / DEFAULT_IMAGE_DIR).resolve()
 if not DEFAULT_IMAGE_DIR.exists():
     DEFAULT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
